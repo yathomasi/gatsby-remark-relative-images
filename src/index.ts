@@ -1,8 +1,8 @@
-import path from 'path';
-import { selectAll } from 'unist-util-select';
-import { defaults, isString, find } from 'lodash';
-import cheerio from 'cheerio';
-import { slash } from './utils';
+import path from "path";
+import { selectAll } from "unist-util-select";
+import { defaults, isString, find } from "lodash";
+import cheerio from "cheerio";
+import { chekcIfExistsOnServer, slash } from "./utils";
 
 export type GatsbyNodePluginArgs = {
   files: GatsbyFile[];
@@ -21,6 +21,7 @@ export type PluginOptions = {
   staticFolderName: string;
   include: string[];
   exclude: string[];
+  baseUrl: string;
 };
 
 export type FrontMatterOptions = {
@@ -49,9 +50,10 @@ export type HtmlNode = {
 } & MarkdownNode;
 
 export const defaultPluginOptions = {
-  staticFolderName: 'static',
+  staticFolderName: "static",
   include: [],
   exclude: [],
+  baseUrl: "",
 };
 
 export const findMatchingFile = (
@@ -63,11 +65,6 @@ export const findMatchingFile = (
     const staticPath = slash(path.join(options.staticFolderName, src));
     return slash(path.normalize(file.absolutePath)).endsWith(staticPath);
   });
-  if (!result) {
-    throw new Error(
-      `No matching file found for src "${src}" in static folder "${options.staticFolderName}". Please check static folder name and that file exists at "${options.staticFolderName}${src}". This error will probably cause a "GraphQLDocumentError" later in build. All converted field paths MUST resolve to a matching file in the "static" folder.`
-    );
-  }
   return result;
 };
 
@@ -83,26 +80,43 @@ export default async (
   const directory = path.dirname(markdownNode.fileAbsolutePath);
 
   // Process all markdown image nodes
-  selectAll('image', markdownAST).forEach((_node: any) => {
+  selectAll("image", markdownAST).forEach(async (_node: any) => {
     const node = _node as MarkdownNode;
     if (!isString(node.url)) return;
     if (!path.isAbsolute(node.url) || !path.extname(node.url)) return;
 
     const file = findMatchingFile(node.url, files, options);
 
-    // Update node.url to be relative to its parent file
-    node.url = path.relative(directory, file.absolutePath);
+    if (file) {
+      // Update node.url to be relative to its parent file
+      node.url = path.relative(directory, file.absolutePath);
+    } else {
+      if (!options.baseUrl) {
+        throw new Error(
+          `No matching file found for src "${node.url}" in static folder "${options.staticFolderName}". Please check static folder name and that file exists at "${options.staticFolderName}${node.url}". This error will probably cause a "GraphQLDocumentError" later in build. All converted field paths MUST resolve to a matching file in the "static" folder.`
+        );
+      }
+      const fullUrl = options.baseUrl + node.url;
+      const exists = await chekcIfExistsOnServer(fullUrl);
+      if (!exists) {
+        throw new Error(
+          `No matching file found for src "${node.url}" in static folder "${options.staticFolderName}" or "${fullUrl}". Please check static folder name and that file exists at "${options.staticFolderName}${node.url}". This error will probably cause a "GraphQLDocumentError" later in build. All converted field paths MUST resolve to a matching file in the "static" folder.`
+        );
+      } else {
+        node.url = fullUrl;
+      }
+    }
   });
 
   // Process all HTML images in markdown body
-  selectAll('html', markdownAST).forEach((_node: any) => {
+  selectAll("html", markdownAST).forEach((_node: any) => {
     const node = _node as HtmlNode;
 
     const $ = cheerio.load(node.value);
 
     if ($(`img`).length === 0) return;
 
-    $(`img`).each((_, element) => {
+    $(`img`).each(async (_, element) => {
       // Get the details we need.
       const url = $(element).attr(`src`);
 
@@ -111,12 +125,30 @@ export default async (
       if (!path.isAbsolute(url) || !path.extname(url)) return;
 
       const file = findMatchingFile(url, files, options);
+      if (file) {
+        // Make the image src relative to its parent node
+        const src = path.relative(directory, file.absolutePath);
+        $(element).attr("src", src);
 
-      // Make the image src relative to its parent node
-      const src = path.relative(directory, file.absolutePath);
-      $(element).attr('src', src);
+        node.value = $(`body`).html() ?? ""; // fix for cheerio v1
+      } else {
+        if (!options.baseUrl) {
+          throw new Error(
+            `No matching file found for src "${node.url}" in static folder "${options.staticFolderName}". Please check static folder name and that file exists at "${options.staticFolderName}${node.url}". This error will probably cause a "GraphQLDocumentError" later in build. All converted field paths MUST resolve to a matching file in the "static" folder.`
+          );
+        }
+        const fullUrl = options.baseUrl + node.url;
+        const exists = await chekcIfExistsOnServer(fullUrl);
+        if (!exists) {
+          throw new Error(
+            `No matching file found for src "${node.url}" in static folder "${options.staticFolderName}" or "${fullUrl}". Please check static folder name and that file exists at "${options.staticFolderName}${node.url}". This error will probably cause a "GraphQLDocumentError" later in build. All converted field paths MUST resolve to a matching file in the "static" folder.`
+          );
+        } else {
+          $(element).attr("src", fullUrl);
 
-      node.value = $(`body`).html() ?? ''; // fix for cheerio v1
+          node.value = $(`body`).html() ?? ""; // fix for cheerio v1
+        }
+      }
     });
   });
 };
