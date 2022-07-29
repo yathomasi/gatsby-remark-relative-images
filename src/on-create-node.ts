@@ -7,8 +7,8 @@ import {
   GatsbyFile,
   MarkdownNode,
   findMatchingFile,
+  findMatchingFileRemote,
 } from ".";
-import { chekcIfExistsOnServer } from "./utils";
 
 export type GatsbyPluginArgs = {
   node: MarkdownNode;
@@ -56,20 +56,8 @@ export const onCreateNode = (
       if (file) {
         newValue = path.relative(directory, file.absolutePath);
       } else {
-        if (!options.baseUrl) {
-          throw new Error(
-            `No matching file found for src "${node.url}" in static folder "${options.staticFolderName}". Please check static folder name and that file exists at "${options.staticFolderName}${node.url}". This error will probably cause a "GraphQLDocumentError" later in build. All converted field paths MUST resolve to a matching file in the "static" folder.`
-          );
-        }
-        const fullUrl = options.baseUrl + node.url;
-        const exists = await chekcIfExistsOnServer(fullUrl);
-        if (!exists) {
-          throw new Error(
-            `No matching file found for src "${node.url}" in static folder "${options.staticFolderName}" or "${fullUrl}". Please check static folder name and that file exists at "${options.staticFolderName}${node.url}". This error will probably cause a "GraphQLDocumentError" later in build. All converted field paths MUST resolve to a matching file in the "static" folder.`
-          );
-        } else {
-          newValue = fullUrl;
-        }
+        const remoteFileUrl = await findMatchingFileRemote(node.url, options);
+        newValue = remoteFileUrl;
       }
 
       this.update(newValue);

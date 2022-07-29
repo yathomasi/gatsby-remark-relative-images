@@ -68,6 +68,25 @@ export const findMatchingFile = (
   return result;
 };
 
+export const findMatchingFileRemote = async (
+  src: string,
+  options: PluginOptions
+) => {
+  if (!options.baseUrl) {
+    throw new Error(
+      `No matching file found for src "${src}" in static folder "${options.staticFolderName}". Please check static folder name and that file exists at "${options.staticFolderName}${src}". This error will probably cause a "GraphQLDocumentError" later in build. All converted field paths MUST resolve to a matching file in the "static" folder.`
+    );
+  }
+  const fullUrl = options.baseUrl + src;
+  const exists = await chekcIfExistsOnServer(fullUrl);
+  if (!exists) {
+    throw new Error(
+      `No matching file found for src "${src}" in static folder "${options.staticFolderName}" or "${fullUrl}". Please check static folder name and that file exists at "${options.staticFolderName}${src}". This error will probably cause a "GraphQLDocumentError" later in build. All converted field paths MUST resolve to a matching file in the "static" folder.`
+    );
+  }
+  return fullUrl;
+};
+
 export default async (
   { files, markdownNode, markdownAST }: GatsbyNodePluginArgs,
   pluginOptions: PluginOptions
@@ -91,20 +110,8 @@ export default async (
       // Update node.url to be relative to its parent file
       node.url = path.relative(directory, file.absolutePath);
     } else {
-      if (!options.baseUrl) {
-        throw new Error(
-          `No matching file found for src "${node.url}" in static folder "${options.staticFolderName}". Please check static folder name and that file exists at "${options.staticFolderName}${node.url}". This error will probably cause a "GraphQLDocumentError" later in build. All converted field paths MUST resolve to a matching file in the "static" folder.`
-        );
-      }
-      const fullUrl = options.baseUrl + node.url;
-      const exists = await chekcIfExistsOnServer(fullUrl);
-      if (!exists) {
-        throw new Error(
-          `No matching file found for src "${node.url}" in static folder "${options.staticFolderName}" or "${fullUrl}". Please check static folder name and that file exists at "${options.staticFolderName}${node.url}". This error will probably cause a "GraphQLDocumentError" later in build. All converted field paths MUST resolve to a matching file in the "static" folder.`
-        );
-      } else {
-        node.url = fullUrl;
-      }
+      const remoteFileUrl = await findMatchingFileRemote(node.url, options);
+      node.url = remoteFileUrl;
     }
   });
 
@@ -132,22 +139,9 @@ export default async (
 
         node.value = $(`body`).html() ?? ""; // fix for cheerio v1
       } else {
-        if (!options.baseUrl) {
-          throw new Error(
-            `No matching file found for src "${node.url}" in static folder "${options.staticFolderName}". Please check static folder name and that file exists at "${options.staticFolderName}${node.url}". This error will probably cause a "GraphQLDocumentError" later in build. All converted field paths MUST resolve to a matching file in the "static" folder.`
-          );
-        }
-        const fullUrl = options.baseUrl + node.url;
-        const exists = await chekcIfExistsOnServer(fullUrl);
-        if (!exists) {
-          throw new Error(
-            `No matching file found for src "${node.url}" in static folder "${options.staticFolderName}" or "${fullUrl}". Please check static folder name and that file exists at "${options.staticFolderName}${node.url}". This error will probably cause a "GraphQLDocumentError" later in build. All converted field paths MUST resolve to a matching file in the "static" folder.`
-          );
-        } else {
-          $(element).attr("src", fullUrl);
-
-          node.value = $(`body`).html() ?? ""; // fix for cheerio v1
-        }
+        const remoteFileUrl = await findMatchingFileRemote(node.url, options);
+        $(element).attr("src", remoteFileUrl);
+        node.value = $(`body`).html() ?? ""; // fix for cheerio v1
       }
     });
   });
