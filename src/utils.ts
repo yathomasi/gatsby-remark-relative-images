@@ -1,3 +1,4 @@
+import axios from "axios";
 export const slash = (path: string): string => {
   const isExtendedLengthPath = /^\\\\\?\\/.test(path);
 
@@ -9,8 +10,8 @@ export const slash = (path: string): string => {
 
 export const chekcIfExistsOnServer = async (url) => {
   try {
-    const res = await fetch(url, { method: "HEAD" });
-    return res.ok;
+    await axios(url, { method: "HEAD" });
+    return true;
   } catch (error) {
     return false;
   }

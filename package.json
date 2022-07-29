@@ -27,6 +27,7 @@
   "author": "Daniel Mahon <daniel@mahonstudios.com>",
   "license": "0BSD",
   "dependencies": {
+    "axios": "^0.27.2",
     "cheerio": "1.0.0-rc.3",
     "is-invalid-path": "1.0.2",
     "lodash": "4.17.20",
