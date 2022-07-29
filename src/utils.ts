@@ -1,5 +1,3 @@
-import fetch from "node-fetch";
-
 export const slash = (path: string): string => {
   const isExtendedLengthPath = /^\\\\\?\\/.test(path);
 
